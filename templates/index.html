@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Environmental Monitoring</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <main class="container">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Arduino Uno • DHT11 • LDR</p>
+        <h1>Environmental Monitoring</h1>
+        <p class="subtitle">Monitoring suhu, kelembapan, dan intensitas cahaya secara real-time.</p>
+      </div>
+
+      <div id="statusBadge" class="status status-offline">
+        <span class="dot"></span>
+        <span id="statusText">Menghubungkan...</span>
+      </div>
+    </header>
+
+    <section class="cards">
+      <article class="card">
+        <div class="card-top">
+          <div class="card-label">Suhu ruangan</div>
+          <span class="sensor-badge">DHT11</span>
+        </div>
+        <div class="card-value"><span id="temperature">--</span><span class="unit">°C</span></div>
+        <div class="card-foot">Pembacaan temperatur saat ini</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top">
+          <div class="card-label">Kelembapan</div>
+          <span class="sensor-badge">DHT11</span>
+        </div>
+        <div class="card-value"><span id="humidity">--</span><span class="unit">%</span></div>
+        <div class="card-foot">Relative humidity</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top">
+          <div class="card-label">Intensitas cahaya</div>
+          <span class="sensor-badge">LDR</span>
+        </div>
+        <div class="card-value"><span id="lux">--</span><span class="unit">lx</span></div>
+        <div class="card-foot" id="luxNote">Lux estimasi LDR — belum dikalibrasi</div>
+      </article>
+    </section>
+
+    <section class="toolbar panel">
+      <div>
+        <div class="toolbar-title">Rentang data grafik</div>
+        <div class="toolbar-subtitle">Filter berlaku untuk semua grafik dan PNG yang didownload.</div>
+      </div>
+
+      <div class="filter-group">
+        <button class="filter-btn active" data-range="realtime">Real-time</button>
+        <button class="filter-btn" data-range="5m">5 Menit</button>
+        <button class="filter-btn" data-range="30m">30 Menit</button>
+        <button class="filter-btn" data-range="1h">1 Jam</button>
+        <button class="filter-btn" data-range="24h">24 Jam</button>
+      </div>
+    </section>
+
+    <section class="chart-grid">
+      <article class="panel chart-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Suhu</h2>
+            <p id="temperatureRangeText">Data sejak program dijalankan</p>
+          </div>
+          <button class="download-btn" onclick="downloadChart(temperatureChart, 'grafik-suhu')">Download PNG</button>
+        </div>
+        <div class="chart-wrap"><canvas id="temperatureChart"></canvas></div>
+      </article>
+
+      <article class="panel chart-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Kelembapan</h2>
+            <p id="humidityRangeText">Data sejak program dijalankan</p>
+          </div>
+          <button class="download-btn" onclick="downloadChart(humidityChart, 'grafik-kelembapan')">Download PNG</button>
+        </div>
+        <div class="chart-wrap"><canvas id="humidityChart"></canvas></div>
+      </article>
+
+      <article class="panel chart-panel wide">
+        <div class="panel-header">
+          <div>
+            <h2>Intensitas Cahaya</h2>
+            <p id="luxRangeText">Lux estimasi berdasarkan LDR</p>
+          </div>
+          <button class="download-btn" onclick="downloadChart(luxChart, 'grafik-lux')">Download PNG</button>
+        </div>
+        <div class="chart-wrap wide-chart"><canvas id="luxChart"></canvas></div>
+      </article>
+    </section>
+
+    <section class="info-grid">
+      <article class="panel info-card">
+        <span class="info-label">Port Arduino</span>
+        <strong id="port">--</strong>
+      </article>
+
+      <article class="panel info-card">
+        <span class="info-label">Update terakhir</span>
+        <strong id="timestamp">--</strong>
+      </article>
+
+      <article class="panel info-card">
+        <span class="info-label">LDR raw</span>
+        <strong><span id="ldr">--</span> ADC</strong>
+      </article>
+
+      <article class="panel info-card">
+        <span class="info-label">Resistansi LDR</span>
+        <strong id="ldrResistance">--</strong>
+      </article>
+    </section>
+
+    <section class="calibration-note">
+      <strong>Catatan Lux:</strong>
+      Nilai lux dihitung dengan model <code>Lux = A × R<sup>-B</sup></code>.
+      Selama A dan B belum didapat dari kalibrasi menggunakan lux meter, nilai lux harus dianggap sebagai estimasi.
+    </section>
+  </main>
+
+<script>
+const RANGE_LABELS = {
+  realtime: 'Data sejak program dijalankan',
+  '5m': '5 menit terakhir',
+  '30m': '30 menit terakhir',
+  '1h': '1 jam terakhir',
+  '24h': '24 jam terakhir'
+};
+
+let activeRange = 'realtime';
+
+function commonOptions(unit) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { intersect: false, mode: 'index' },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: context => `${context.parsed.y ?? '--'} ${unit}`
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { maxTicksLimit: 10, maxRotation: 0 }
+      },
+      y: {
+        beginAtZero: false,
+        ticks: {
+          callback: value => `${value} ${unit}`
+        }
+      }
+    }
+  };
+}
+
+function createChart(id, label, unit) {
+  return new Chart(document.getElementById(id), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label,
+        data: [],
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        tension: 0.25,
+        fill: false
+      }]
+    },
+    options: commonOptions(unit)
+  });
+}
+
+const temperatureChart = createChart('temperatureChart', 'Suhu', '°C');
+const humidityChart = createChart('humidityChart', 'Kelembapan', '%');
+const luxChart = createChart('luxChart', 'Lux', 'lx');
+
+function formatChartTime(timestamp) {
+  if (!timestamp) return '--';
+  const [datePart, timePart] = timestamp.split(' ');
+
+  if (activeRange === '24h') {
+    return `${datePart.slice(5)} ${timePart.slice(0, 5)}`;
+  }
+
+  return timePart ? timePart.slice(0, 8) : timestamp;
+}
+
+function setChartRows(chart, rows, key) {
+  chart.data.labels = rows.map(row => formatChartTime(row.timestamp));
+  chart.data.datasets[0].data = rows.map(row => row[key]);
+  chart.update('none');
+}
+
+function updateRangeDescription() {
+  const label = RANGE_LABELS[activeRange];
+  document.getElementById('temperatureRangeText').textContent = label;
+  document.getElementById('humidityRangeText').textContent = label;
+  document.getElementById('luxRangeText').textContent = `${label} • Lux estimasi LDR`;
+}
+
+async function loadHistory() {
+  try {
+    const response = await fetch(`/api/history?range=${encodeURIComponent(activeRange)}`, { cache: 'no-store' });
+    const payload = await response.json();
+    const rows = payload.rows || [];
+
+    setChartRows(temperatureChart, rows, 'temperature');
+    setChartRows(humidityChart, rows, 'humidity');
+    setChartRows(luxChart, rows, 'lux');
+  } catch (error) {
+    console.error('Gagal membaca history:', error);
+  }
+}
+
+async function loadLatest() {
+  try {
+    const response = await fetch('/api/data', { cache: 'no-store' });
+    const data = await response.json();
+
+    document.getElementById('temperature').textContent = data.temperature ?? '--';
+    document.getElementById('humidity').textContent = data.humidity ?? '--';
+    document.getElementById('ldr').textContent = data.ldr ?? '--';
+    document.getElementById('port').textContent = data.port ?? '--';
+    document.getElementById('timestamp').textContent = data.timestamp ?? '--';
+
+    document.getElementById('lux').textContent =
+      data.lux !== null && data.lux !== undefined
+        ? Number(data.lux).toLocaleString('id-ID', { maximumFractionDigits: 2 })
+        : '--';
+
+    if (data.ldr_resistance_ohm !== null && data.ldr_resistance_ohm !== undefined) {
+      const kiloOhm = Number(data.ldr_resistance_ohm) / 1000;
+      document.getElementById('ldrResistance').textContent =
+        `${kiloOhm.toLocaleString('id-ID', { maximumFractionDigits: 2 })} kΩ`;
+    } else {
+      document.getElementById('ldrResistance').textContent = '--';
+    }
+
+    const badge = document.getElementById('statusBadge');
+    const statusText = document.getElementById('statusText');
+
+    if (data.connected) {
+      badge.classList.remove('status-offline');
+      badge.classList.add('status-online');
+      statusText.textContent = data.message || 'Terhubung';
+    } else {
+      badge.classList.remove('status-online');
+      badge.classList.add('status-offline');
+      statusText.textContent = data.message || 'Tidak terhubung';
+    }
+
+    document.getElementById('luxNote').textContent = data.lux_calibrated
+      ? 'Lux hasil kalibrasi LDR'
+      : 'Lux estimasi LDR — belum dikalibrasi';
+
+  } catch (error) {
+    const badge = document.getElementById('statusBadge');
+    badge.classList.remove('status-online');
+    badge.classList.add('status-offline');
+    document.getElementById('statusText').textContent = 'Dashboard tidak dapat membaca API';
+  }
+}
+
+function downloadChart(chart, baseFilename) {
+  const sourceCanvas = chart.canvas;
+  const tempCanvas = document.createElement('canvas');
+
+  tempCanvas.width = sourceCanvas.width;
+  tempCanvas.height = sourceCanvas.height;
+
+  const ctx = tempCanvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+  ctx.drawImage(sourceCanvas, 0, 0);
+
+  const link = document.createElement('a');
+  const stamp = new Date().toISOString().replaceAll(':', '-').slice(0, 19);
+  const rangeName = activeRange.replace('realtime', 'real-time');
+
+  link.download = `${baseFilename}-${rangeName}-${stamp}.png`;
+  link.href = tempCanvas.toDataURL('image/png');
+  link.click();
+}
+
+document.querySelectorAll('.filter-btn').forEach(button => {
+  button.addEventListener('click', async () => {
+    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+    button.classList.add('active');
+    activeRange = button.dataset.range;
+    updateRangeDescription();
+    await loadHistory();
+  });
+});
+
+updateRangeDescription();
+loadLatest();
+loadHistory();
+
+setInterval(loadLatest, 2000);
+setInterval(loadHistory, 4000);
+</script>
+</body>
+</html>
