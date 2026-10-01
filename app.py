@@ -147,6 +147,7 @@ def serial_reader():
                 if not match:
                     continue
 
+
                 temperature = float(match.group(1))
                 humidity = float(match.group(2))
                 ldr = int(match.group(3))

@@ -192,8 +192,8 @@ h1 {
 }
 
 .chart-panel {
-  border-radius: 18px;
-  padding: 20px;
+  border-radius: 20px;
+  padding: 22px 24px;
 }
 
 .chart-panel.wide {
@@ -209,21 +209,24 @@ h1 {
 
 .panel-header h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.02em;
 }
 
 .panel-header p {
-  margin: 5px 0 0;
-  font-size: 12px;
+  margin: 4px 0 0;
+  font-size: 13px;
   color: #8b93a5;
 }
 
 .chart-wrap {
-  margin-top: 16px;
-  height: 270px;
+  margin-top: 20px;
+  height: 290px;
+  position: relative;
 }
 
-.wide-chart { height: 320px; }
+.wide-chart { height: 340px; }
 
 .info-grid {
   margin-top: 16px;
