@@ -25,8 +25,9 @@ LUX_CALIBRATED = False
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
-CSV_FILE = DATA_DIR / "sensor_log.csv"
 SESSION_START = datetime.now()
+# File CSV baru setiap running: sensor_log_YYYYMMDD_HHMMSS.csv
+CSV_FILE = DATA_DIR / f"sensor_log_{SESSION_START.strftime('%Y%m%d_%H%M%S')}.csv"
 
 latest = {
     "connected": False,
@@ -303,6 +304,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print("IoT Dashboard Arduino v2")
     print("Buka browser: http://127.0.0.1:5000")
+    print(f"Log CSV aktif: {CSV_FILE}")
     print("PENTING: tutup Serial Monitor Arduino IDE.")
     print(f"Lux calibrated: {LUX_CALIBRATED}")
     print("=" * 60)
